@@ -1,0 +1,27 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "nft-api",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-07-15",
+	"observability": {
+		"enabled": true
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "matedevdao",
+			"database_id": "146cd05b-caed-4e15-9ffb-d91cfd37112b"
+		}
+	],
+	"env": {
+		"development": {
+			"d1_databases": [
+				{
+					"binding": "DB",
+					"database_name": "matedevdao",
+					"database_id": "146cd05b-caed-4e15-9ffb-d91cfd37112b"
+				}
+			]
+		}
+	}
+}
