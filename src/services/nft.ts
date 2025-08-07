@@ -1,7 +1,7 @@
-import { kaiaClient } from '../kaia';
-
-const PARSING_NFT_DATA_CONTRACT_ADDRESS =
-  '0x8A98A038dcA75091225EE0a1A11fC20Aa23832A0';
+import DogeSoundClubBiasedMatesMetadata from './static-metadata/dogesoundclub-biased-mates-metadata.json' assert { type: 'json' };
+import DogeSoundClubEMatesMetadata from './static-metadata/dogesoundclub-e-mates-metadata.json' assert { type: 'json' };
+import DogeSoundClubMatesMetadata from './static-metadata/dogesoundclub-mates-metadata.json' assert { type: 'json' };
+import KingCrownDAOPixelKongzMetadata from './static-metadata/kingcrowndao-pixel-kongz-metadata.json' assert { type: 'json' };
 
 const NFT_ADDRESSES: Record<string, `0x${string}`> = {
   'dogesoundclub-mates': '0xE47E90C58F8336A2f24Bcd9bCB530e2e02E1E8ae',
@@ -20,57 +20,6 @@ const STATIC_METADATA_COLLECTIONS = [
   'dogesoundclub-biased-mates',
   'kingcrowndao-pixel-kongz',
 ];
-
-async function getBalances(address: `0x${string}`, contracts: `0x${string}`[]): Promise<bigint[]> {
-  return await kaiaClient.readContract({
-    address: PARSING_NFT_DATA_CONTRACT_ADDRESS,
-    abi: [{
-      "inputs": [
-        {
-          "internalType": "address",
-          "name": "holder",
-          "type": "address"
-        },
-        {
-          "internalType": "address[]",
-          "name": "",
-          "type": "address[]"
-        }
-      ],
-      "name": "getERC721BalanceList_OneHolder",
-      "outputs": [
-        {
-          "internalType": "uint256[]",
-          "name": "balances",
-          "type": "uint256[]"
-        }
-      ],
-      "stateMutability": "view",
-      "type": "function"
-    }],
-    functionName: 'getERC721BalanceList_OneHolder',
-    args: [address as `0x${string}`, contracts],
-  }) as bigint[];
-}
-
-async function getHolderCounts(
-  env: Env,
-  collections: { collection: string, address: string }[],
-): Promise<Record<string, number>> {
-  const holderCounts: Record<string, number> = {};
-
-  for (const { collection, address } of collections) {
-    const row = await env.DB.prepare(`
-      SELECT COUNT(DISTINCT holder) as count
-      FROM nfts
-      WHERE nft_address = ?
-    `).bind(address).first<{ count: number }>();
-
-    holderCounts[collection] = row?.count ?? 0;
-  }
-
-  return holderCounts;
-}
 
 type NftRow = {
   nft_address: string;
@@ -95,15 +44,22 @@ type NftData = {
   holder: string;
 };
 
-async function fetchStaticMetadata(collection: string, tokenId: number) {
-  const res = await fetch(`https://matedevdao.github.io/static-kaia-nft-assets/${collection}/metadata/${tokenId}.json`);
-  return await res.json<any>();
+function getStaticMetadata(collection: string, tokenId: number) {
+  let metadatas: any;
+  if (collection === 'dogesoundclub-biased-mates') {
+    metadatas = DogeSoundClubBiasedMatesMetadata;
+  } else if (collection === 'dogesoundclub-e-mates') {
+    metadatas = DogeSoundClubEMatesMetadata;
+  } else if (collection === 'dogesoundclub-mates') {
+    metadatas = DogeSoundClubMatesMetadata;
+  } else if (collection === 'kingcrowndao-pixel-kongz') {
+    metadatas = KingCrownDAOPixelKongzMetadata;
+  }
+  return metadatas?.find((item: any) => item.id === tokenId);
 }
 
-async function rowsToData(rows: NftRow[]) {
+function rowsToData(rows: NftRow[]) {
   const data: { [key: string]: NftData } = {};
-
-  const promises: Promise<void>[] = [];
 
   for (const row of rows) {
     const collection = Object.keys(NFT_ADDRESSES).find((key) =>
@@ -112,23 +68,13 @@ async function rowsToData(rows: NftRow[]) {
     if (!collection) throw new Error(`Unknown collection address: ${row.nft_address}`);
 
     if (STATIC_METADATA_COLLECTIONS.includes(collection)) {
-      /*promises.push((async () => {
-        const metadata = await fetchStaticMetadata(collection, row.token_id);
-        if (!metadata) throw new Error(`Static metadata not found for ${collection} #${row.token_id}`);
-        data[`${collection}:${row.token_id}`] = {
-          ...metadata,
-          collection,
-          id: row.token_id,
-          holder: row.holder,
-        };
-      })());*/
+      const metadata = getStaticMetadata(collection, row.token_id);
+      if (!metadata) throw new Error(`Static metadata not found for ${collection} #${row.token_id}`);
 
-      // 성능 향상을 위해 fetch 하지 않고 기본값으로 초기화
       data[`${collection}:${row.token_id}`] = {
+        ...metadata,
         collection,
         id: row.token_id,
-        name: `#${row.token_id}`,
-        image: `https://matedevdao.github.io/static-kaia-nft-assets/${collection}/images/${row.token_id}.png`,
         holder: row.holder,
       };
     }
@@ -181,8 +127,6 @@ async function rowsToData(rows: NftRow[]) {
     }
   }
 
-  await Promise.all(promises);
-
   return data;
 }
 
@@ -209,7 +153,7 @@ async function getBulkNftData(env: Env, nfts: { collection: string; tokenId: num
     const stmt = env.DB.prepare(sql).bind(...bindValues);
     const { results } = await stmt.all<NftRow>();
 
-    return await rowsToData(results);
+    return rowsToData(results);
   }
   return {};
 }
@@ -224,8 +168,8 @@ async function fetchHeldNftData(env: Env, address: string) {
   const stmt = env.DB.prepare(sql).bind(address);
   const { results } = await stmt.all<NftRow>();
 
-  return await rowsToData(results);
+  return rowsToData(results);
 }
 
-export { fetchHeldNftData, getBalances, getBulkNftData, getHolderCounts };
+export { fetchHeldNftData, getBulkNftData };
 

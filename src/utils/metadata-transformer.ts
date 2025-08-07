@@ -6,23 +6,23 @@ type OpenSeaAttribute = {
 
 type OpenSeaMetadataSchem = {
   name: string;
-  description: string;
+  description?: string;
   image: string;
-  external_url: string;
+  external_url?: string;
   animation_url?: string;
   attributes: OpenSeaAttribute[];
 };
 
 type NftData = {
   traits?: { [traitName: string]: string | number };
-  parts: { [partName: string]: string | number };
+  parts?: { [partName: string]: string | number };
 };
 
 type NftInputPayload = {
   name: string;
-  description: string;
+  description?: string;
   image: string;
-  external_url: string;
+  external_url?: string;
   animation_url?: string;
 } & NftData;
 

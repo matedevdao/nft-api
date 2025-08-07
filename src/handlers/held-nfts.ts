@@ -1,5 +1,6 @@
 import { jsonWithCors } from "@gaiaprotocol/worker-common";
 import { fetchHeldNftData } from "../services/nft";
+import { getAddress } from "viem";
 
 export async function handleHeldNftsRequest(
   request: Request,
@@ -15,7 +16,7 @@ export async function handleHeldNftsRequest(
       return jsonWithCors({ error: 'Invalid wallet address' }, 400);
     }
 
-    const metadataMap = await fetchHeldNftData(env, walletAddress);
+    const metadataMap = await fetchHeldNftData(env, getAddress(walletAddress));
 
     const metadataList = Object.values(metadataMap);
 
