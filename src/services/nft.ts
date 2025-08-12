@@ -21,6 +21,25 @@ const STATIC_METADATA_COLLECTIONS = [
   'kingcrowndao-pixel-kongz',
 ];
 
+const STATIC_METADATA: Record<string, any> = {
+  'dogesoundclub-mates': {
+    "description": "클레이튼 체인 최초의 제너레이티브 아트, 도지사운드클럽의 투표권으로 사용됨.",
+    "external_url": "https://dogesound.club/",
+  },
+  'dogesoundclub-e-mates': {
+    "description": "E-MATES is a customizable avatar NFT optimized for social media profiles. You can pay for Klaytn Chain’s token mix and modify properties such as background, clothing, and pets. For this reason, the rarity of each NFT displayed on Opensea or any other marketplace may change. The property, STATUS is displayed as Intial if the property is in the original published state, and as Customized if changed. Customizing like the initial E-MATE is prohibited. It will be protected that all initial E-MATEs are unique. Even if you change the properties of your E-MATE, you can also pay for the mix and reset it to its initial state.",
+    "external_url": "https://dogesound.club/",
+  },
+  'dogesoundclub-biased-mates': {
+    "description": "Biased Mate Cycle Shop, we sell bikes and time.",
+    "external_url": "https://dogesound.club/",
+  },
+  'kingcrowndao-pixel-kongz': {
+    "description": "Pixel Kongz are unique and randomly generated 2D NFT Social Avatars for your online experiences. Some appear normal. Some look weird. Some are just damn cool!",
+    "external_url": "https://kingcrowndao.github.io/",
+  },
+};
+
 type NftRow = {
   nft_address: string;
   token_id: number;
@@ -76,6 +95,7 @@ function rowsToData(rows: NftRow[]) {
         ...metadata,
         image: 'https://matedevdao.github.io/static-kaia-nft-assets/' + metadata.image,
         thumbnail: 'https://matedevdao.github.io/static-kaia-nft-assets/' + metadata.thumbnail,
+        ...STATIC_METADATA[collection],
 
         collection,
         id: row.token_id,
