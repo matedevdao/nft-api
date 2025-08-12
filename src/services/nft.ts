@@ -74,6 +74,9 @@ function rowsToData(rows: NftRow[]) {
 
       data[`${collection}:${row.token_id}`] = {
         ...metadata,
+        image: 'https://matedevdao.github.io/static-kaia-nft-assets/' + metadata.image,
+        thumbnail: 'https://matedevdao.github.io/static-kaia-nft-assets/' + metadata.thumbnail,
+
         collection,
         id: row.token_id,
         holder: row.holder,
