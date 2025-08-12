@@ -12,7 +12,7 @@ export default {
     if (url.pathname.startsWith('/metadata/')) return handleMetadataRequest(request, env);
     if (url.pathname.startsWith('/nft/')) return handleNftDataRequest(request, env);
     if (url.pathname.endsWith('/nfts')) return handleHeldNftsRequest(request, env);
-    if (url.pathname === '/nfts/by-ids') return handleNftDataByIds(request, env);
+    if (url.pathname.startsWith('/nfts/by-ids')) return handleNftDataByIds(request, env);
 
     return new Response('Not Found', { status: 404 });
   },
