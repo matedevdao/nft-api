@@ -184,7 +184,6 @@ async function getBulkNftData(env: Env, nfts: { collection: string; tokenId: num
   return {};
 }
 
-
 async function fetchHeldNftData(env: Env, address: string) {
   const sql =
     `SELECT nft_address, token_id, holder, style, parts, dialogue, image \n` +
