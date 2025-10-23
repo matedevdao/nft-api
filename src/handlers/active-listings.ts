@@ -1,5 +1,5 @@
 import { jsonWithCors } from "@gaiaprotocol/worker-common";
-import { getBulkNftData } from "../services/nft"; // ✅ handleHeldNftsRequest에서 쓰던 서비스 재사용
+import { getBulkNftData } from "../services/nft";
 
 const ETH_ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
 

@@ -1,6 +1,6 @@
 import { preflightResponse } from "@gaiaprotocol/worker-common";
 import { WorkerEntrypoint } from "cloudflare:workers";
-import { handleGetActiveListings } from "./handlers/get-active-listings";
+import { handleGetActiveListings } from "./handlers/active-listings";
 import { handleHeldNftsRequest } from "./handlers/held-nfts";
 import { handleMetadataRequest } from "./handlers/metadata";
 import { handleNftDataRequest } from "./handlers/nft";
