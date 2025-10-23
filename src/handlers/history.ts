@@ -14,18 +14,20 @@ const ADDR_TO_COLLECTION: Record<string, string> = {
   "0x595b299Db9d83279d20aC37A85D36489987d7660": "babyping",
 };
 
+export type HistoryEventKind = "LISTED" | "SOLD" | "CANCELLED";
+
 type EventRow = {
-  event_id: number;               // PK, DESC 커서
-  kind: "LISTED" | "SOLD" | "CANCELLED" | "TRANSFER_IN" | "TRANSFER_OUT";
-  tx_hash: string;
+  event_id: number;              // list_id*10 + code
+  kind: HistoryEventKind;
+  tx_hash: string | null;
   block_number: number | null;
-  ts_sec: number | null;          // seconds
+  ts_sec: number | null;
   nft_address: string;
-  token_id: string;               // decimal string
-  price_wei: string | null;       // 일부 이벤트는 null 가능
-  actor?: string | null;          // 이벤트 주체(있다면)
-  from?: string | null;
-  to?: string | null;
+  token_id: string;
+  price_wei: string | null;
+  actor: string | null;
+  from_addr: string | null;
+  to_addr: string | null;
 };
 
 type NftData = {
@@ -48,14 +50,14 @@ export async function handleGetHistory(request: Request, env: Env): Promise<Resp
     const url = new URL(request.url);
 
     // ===== Filters =====
-    const account = url.searchParams.get("account");      // 내 주소(관여 이벤트)
-    const nftAddress = url.searchParams.get("nft_address");
-    const kind = url.searchParams.get("kind");            // LISTED | SOLD | CANCELLED | TRANSFER_IN | TRANSFER_OUT
-    const cursor = url.searchParams.get("cursor");        // numeric event_id
+    const account = url.searchParams.get("account") ?? undefined;     // 관여 주소 (owner/buyer)
+    const nftAddress = url.searchParams.get("nft_address") ?? undefined;
+    const kind = url.searchParams.get("kind") as HistoryEventKind | undefined; // LISTED | SOLD | CANCELLED
+    const cursor = url.searchParams.get("cursor") ?? undefined;       // numeric event_id
     const limitParam = url.searchParams.get("limit");
     const limit = Math.max(1, Math.min(Number(limitParam ?? 50) || 50, 200));
 
-    // Validate
+    // ===== Validate =====
     if (account && !ETH_ADDR_RE.test(account)) {
       return jsonWithCors({ error: "유효하지 않은 account 주소" }, 400);
     }
@@ -65,71 +67,130 @@ export async function handleGetHistory(request: Request, env: Env): Promise<Resp
     if (cursor && !/^\d+$/.test(cursor)) {
       return jsonWithCors({ error: "유효하지 않은 cursor" }, 400);
     }
-    if (kind && !["LISTED", "SOLD", "CANCELLED", "TRANSFER_IN", "TRANSFER_OUT"].includes(kind)) {
+    if (kind && !["LISTED", "SOLD", "CANCELLED"].includes(kind)) {
       return jsonWithCors({ error: "유효하지 않은 kind" }, 400);
     }
 
-    // ===== WHERE / Binds =====
-    const where: string[] = [];
-    const binds: (string | number)[] = [];
+    // ===== Base filter for listings =====
+    const baseWhere: string[] = [];
+    const baseBinds: (string | number)[] = [];
 
-    if (account) {
-      // from / to / actor 중 하나로 관여한 이벤트
-      where.push("(from = ? OR to = ? OR actor = ?)");
-      binds.push(account, account, account);
-    }
     if (nftAddress) {
-      where.push("nft_address = ?");
-      binds.push(nftAddress);
+      baseWhere.push("nft_address = ?");
+      baseBinds.push(nftAddress);
     }
+    // account 필터는 UNION OUTER에서 actor/from/to 기준으로 걸 거라 여기선 생략
+
+    // ===== UNION 으로 가상 이벤트 생성 =====
+    // event_id = list_id*10 + code(1:LISTED,2:SOLD,3:CANCELLED)
+    // LISTED: 항상 존재
+    // SOLD: status='BOUGHT'
+    // CANCELLED: status='CANCELLED'
+    const baseWhereSql = baseWhere.length ? `WHERE ${baseWhere.join(" AND ")}` : "";
+
+    let sql = `
+      WITH events AS (
+        -- LISTED
+        SELECT
+          (list_id * 10 + 1) AS event_id,
+          'LISTED'           AS kind,
+          tx_listed          AS tx_hash,
+          block_listed       AS block_number,
+          ts_listed          AS ts_sec,
+          nft_address,
+          token_id,
+          price_wei,
+          owner              AS actor,
+          owner              AS from_addr,
+          NULL               AS to_addr
+        FROM nft_marketplace_listings
+        ${baseWhereSql}
+
+        UNION ALL
+
+        -- SOLD
+        SELECT
+          (list_id * 10 + 2) AS event_id,
+          'SOLD'             AS kind,
+          tx_settled         AS tx_hash,
+          block_settled      AS block_number,
+          ts_settled         AS ts_sec,
+          nft_address,
+          token_id,
+          price_wei,
+          buyer              AS actor,
+          owner              AS from_addr,
+          buyer              AS to_addr
+        FROM nft_marketplace_listings
+        ${baseWhereSql.length ? baseWhereSql + " AND " : "WHERE "} status = 'BOUGHT' AND tx_settled IS NOT NULL
+
+        UNION ALL
+
+        -- CANCELLED
+        SELECT
+          (list_id * 10 + 3) AS event_id,
+          'CANCELLED'        AS kind,
+          tx_settled         AS tx_hash,
+          block_settled      AS block_number,
+          ts_settled         AS ts_sec,
+          nft_address,
+          token_id,
+          price_wei,
+          owner              AS actor,
+          owner              AS from_addr,
+          NULL               AS to_addr
+        FROM nft_marketplace_listings
+        ${baseWhereSql.length ? baseWhereSql + " AND " : "WHERE "} status = 'CANCELLED' AND tx_settled IS NOT NULL
+      )
+      SELECT *
+      FROM events
+    `;
+
+    const outerWhere: string[] = [];
+    const outerBinds: (string | number)[] = [];
+
     if (kind) {
-      where.push("kind = ?");
-      binds.push(kind);
+      outerWhere.push(`kind = ?`);
+      outerBinds.push(kind);
+    }
+    if (account) {
+      outerWhere.push(`(actor = ? OR from_addr = ? OR to_addr = ?)`);
+      outerBinds.push(account, account, account);
     }
     if (cursor) {
-      where.push("event_id < ?");
-      binds.push(Number(cursor));
+      outerWhere.push(`event_id < ?`);
+      outerBinds.push(Number(cursor));
     }
 
-    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    if (outerWhere.length) {
+      sql += ` WHERE ${outerWhere.join(" AND ")}`;
+    }
 
-    // ===== Query =====
-    // 테이블 가정: nft_marketplace_events
-    // 컬럼 가정: event_id, kind, tx_hash, block_number, ts_sec, nft_address, token_id, price_wei, actor, from, to
-    const sql = `
-      SELECT
-        event_id, kind, tx_hash, block_number, ts_sec,
-        nft_address, token_id, price_wei, actor, \`from\`, \`to\`
-      FROM nft_marketplace_events
-      ${whereSql}
-      ORDER BY event_id DESC
-      LIMIT ?
-    `;
-    binds.push(limit);
+    sql += ` ORDER BY event_id DESC LIMIT ?`;
 
-    const statement = env.DB.prepare(sql).bind(...binds);
-    const { results } = await statement.all<EventRow>();
+    const binds = [...baseBinds, ...baseBinds, ...baseBinds, ...outerBinds, limit];
 
-    // ===== NFT metadata batch =====
+    const stmt = env.DB.prepare(sql).bind(...binds);
+    const { results } = await stmt.all<EventRow>();
+
+    // ===== 메타 일괄 주입 =====
     const pairs: { collection: string; tokenId: number }[] = [];
-    const keys: string[] = [];
     for (const r of results) {
       const coll = ADDR_TO_COLLECTION[r.nft_address];
       if (!coll) continue;
-      const tid = Number(r.token_id);
-      if (!Number.isFinite(tid)) continue;
-      pairs.push({ collection: coll, tokenId: tid });
-      keys.push(`${coll}:${tid}`);
+      const tokenIdNum = Number(r.token_id);
+      if (!Number.isFinite(tokenIdNum)) continue;
+      pairs.push({ collection: coll, tokenId: tokenIdNum });
     }
+    const metaMap = pairs.length
+      ? await getBulkNftData(env, pairs)
+      : {};
 
-    const metaMap = pairs.length ? await getBulkNftData(env, pairs) : {};
-
-    // ===== Build response items =====
     const items = results.map((r) => {
       const coll = ADDR_TO_COLLECTION[r.nft_address];
-      const tid = Number(r.token_id);
-      const key = coll && Number.isFinite(tid) ? `${coll}:${tid}` : "";
-      const nft = key ? (metaMap[key] ?? null) : null;
+      const tokenIdNum = Number(r.token_id);
+      const key = coll && Number.isFinite(tokenIdNum) ? `${coll}:${tokenIdNum}` : "";
+      const nft = key ? metaMap[key] ?? null : null;
 
       return {
         event_id: r.event_id,
@@ -140,9 +201,9 @@ export async function handleGetHistory(request: Request, env: Env): Promise<Resp
         nft_address: r.nft_address,
         token_id: r.token_id,
         price_wei: r.price_wei,
-        actor: r.actor ?? null,
-        from: r.from ?? null,
-        to: r.to ?? null,
+        actor: r.actor,
+        from: r.from_addr,
+        to: r.to_addr,
         nft
       };
     });
@@ -158,9 +219,6 @@ export async function handleGetHistory(request: Request, env: Env): Promise<Resp
     });
   } catch (err) {
     console.error(err);
-    return jsonWithCors(
-      { error: err instanceof Error ? err.message : String(err) },
-      500
-    );
+    return jsonWithCors({ error: err instanceof Error ? err.message : String(err) }, 500);
   }
 }
