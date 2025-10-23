@@ -6,6 +6,7 @@ import { handleMetadataRequest } from "./handlers/metadata";
 import { handleNftDataRequest } from "./handlers/nft";
 import { handleNftDataByIds } from "./handlers/nft-by-ids";
 import { fetchNftDataByIds } from "./services/nft";
+import { handleGetListingById } from "./handlers/listing-by-id";
 
 export default class NftApiWorker extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
@@ -17,6 +18,9 @@ export default class NftApiWorker extends WorkerEntrypoint<Env> {
     if (url.pathname.endsWith('/nfts')) return handleHeldNftsRequest(request, this.env);
     if (url.pathname === '/nfts/by-ids') return handleNftDataByIds(request, this.env);
     if (url.pathname === '/active-listings') return handleGetActiveListings(request, this.env);
+    if (/^\/listings\/\d+$/.test(url.pathname)) {
+      return handleGetListingById(request, this.env);
+    }
 
     return new Response('Not Found', { status: 404 });
   };
