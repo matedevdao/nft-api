@@ -1,5 +1,6 @@
 import { preflightResponse } from "@gaiaprotocol/worker-common";
 import { WorkerEntrypoint } from "cloudflare:workers";
+import { handleGetActiveListings } from "./handlers/get-active-listings";
 import { handleHeldNftsRequest } from "./handlers/held-nfts";
 import { handleMetadataRequest } from "./handlers/metadata";
 import { handleNftDataRequest } from "./handlers/nft";
@@ -15,6 +16,7 @@ export default class NftApiWorker extends WorkerEntrypoint<Env> {
     if (url.pathname.startsWith('/nft/')) return handleNftDataRequest(request, this.env);
     if (url.pathname.endsWith('/nfts')) return handleHeldNftsRequest(request, this.env);
     if (url.pathname === '/nfts/by-ids') return handleNftDataByIds(request, this.env);
+    if (url.pathname === '/active-listings') return handleGetActiveListings(request, this.env);
 
     return new Response('Not Found', { status: 404 });
   };
