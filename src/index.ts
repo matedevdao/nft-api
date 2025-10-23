@@ -2,11 +2,12 @@ import { preflightResponse } from "@gaiaprotocol/worker-common";
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { handleGetActiveListings } from "./handlers/active-listings";
 import { handleHeldNftsRequest } from "./handlers/held-nfts";
+import { handleGetHistory } from "./handlers/history";
+import { handleGetListingById } from "./handlers/listing-by-id";
 import { handleMetadataRequest } from "./handlers/metadata";
 import { handleNftDataRequest } from "./handlers/nft";
 import { handleNftDataByIds } from "./handlers/nft-by-ids";
 import { fetchNftDataByIds } from "./services/nft";
-import { handleGetListingById } from "./handlers/listing-by-id";
 
 export default class NftApiWorker extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
@@ -18,6 +19,7 @@ export default class NftApiWorker extends WorkerEntrypoint<Env> {
     if (url.pathname.endsWith('/nfts')) return handleHeldNftsRequest(request, this.env);
     if (url.pathname === '/nfts/by-ids') return handleNftDataByIds(request, this.env);
     if (url.pathname === '/active-listings') return handleGetActiveListings(request, this.env);
+    if (url.pathname === '/history') return handleGetHistory(request, this.env);
     if (/^\/listings\/\d+$/.test(url.pathname)) {
       return handleGetListingById(request, this.env);
     }
