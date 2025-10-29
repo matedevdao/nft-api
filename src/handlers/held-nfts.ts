@@ -16,32 +16,46 @@ type NftData = {
   contract_addr: string;
 };
 
+const ROOM_NFTS: Record<string, string[]> = {
+  "mates": ["dogesoundclub-mates", "dogesoundclub-e-mates", "dogesoundclub-biased-mates"],
+  "sigor-sparrows": ["sigor-sparrows"],
+  "kcd-kongz": ["kingcrowndao-kongz"],
+  "babyping": ["babyping"],
+};
+
 export async function handleHeldNftsRequest(
   request: Request,
   env: Env
 ): Promise<Response> {
   try {
     const url = new URL(request.url);
-    const segments = url.pathname.split('/'); // "/{wallet}/nfts" => ["", "{wallet}", "nfts"]
+    const segments = url.pathname.split("/"); // "/{wallet}/nfts" => ["", "{wallet}", "nfts"]
     const walletAddress = segments[1];
 
+    // 지갑 주소 검증
     if (!walletAddress || !/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-      return jsonWithCors({ error: 'Invalid wallet address' }, 400);
+      return jsonWithCors({ error: "Invalid wallet address" }, 400);
     }
 
     // 쿼리 파라미터 파싱
-    const collection = url.searchParams.get('collection') || undefined; // 슬러그 (예: "dogesoundclub-mates")
-    const start = url.searchParams.has('start') ? Number(url.searchParams.get('start')) : undefined;
-    const end = url.searchParams.has('end') ? Number(url.searchParams.get('end')) : undefined;
-    const limit = url.searchParams.has('limit') ? Number(url.searchParams.get('limit')) : undefined;
-    const cursor = url.searchParams.has('cursor') ? Number(url.searchParams.get('cursor')) : undefined;
+    const collection = url.searchParams.get("collection") || undefined; // 슬러그 (예: "dogesoundclub-mates")
+    const room = url.searchParams.get("room") || undefined;
+    const start = url.searchParams.has("start") ? Number(url.searchParams.get("start")) : undefined;
+    const end = url.searchParams.has("end") ? Number(url.searchParams.get("end")) : undefined;
+    const limit = url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : undefined;
+    const cursor = url.searchParams.has("cursor") ? Number(url.searchParams.get("cursor")) : undefined;
 
     // 숫자 파라미터 검증
-    if ((start !== undefined && !Number.isFinite(start)) ||
-        (end !== undefined && !Number.isFinite(end)) ||
-        (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) ||
-        (cursor !== undefined && !Number.isFinite(cursor))) {
-      return jsonWithCors({ error: 'Invalid numeric query parameter' }, 400);
+    if (
+      (start !== undefined && !Number.isFinite(start)) ||
+      (end !== undefined && !Number.isFinite(end)) ||
+      (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) ||
+      (cursor !== undefined && !Number.isFinite(cursor))
+    ) {
+      return jsonWithCors({ error: "Invalid numeric query parameter" }, 400);
+    }
+    if (start !== undefined && end !== undefined && start > end) {
+      return jsonWithCors({ error: "start cannot be greater than end" }, 400);
     }
 
     // 보유 NFT 전부 로드 (주소 체크섬화)
@@ -51,21 +65,27 @@ export async function handleHeldNftsRequest(
     // 객체 -> 배열
     let items: NftData[] = Object.values(metadataMap) as NftData[];
 
-    // 1) 컬렉션 필터
+    // 1) 컬렉션 또는 룸 필터 (collection 우선)
     if (collection) {
-      items = items.filter(it => it.collection === collection);
+      items = items.filter((it) => it.collection === collection);
+    } else if (room) {
+      const collections = ROOM_NFTS[room];
+      if (!collections) {
+        return jsonWithCors({ error: `Invalid room: ${room}` }, 400);
+      }
+      items = items.filter((it) => collections.includes(it.collection));
     }
 
     // 2) 토큰 ID 범위 필터
-    if (start !== undefined) items = items.filter(it => Number(it.id) >= start);
-    if (end !== undefined)   items = items.filter(it => Number(it.id) <= end);
+    if (start !== undefined) items = items.filter((it) => Number(it.id) >= start);
+    if (end !== undefined) items = items.filter((it) => Number(it.id) <= end);
 
     // 3) 정렬 (id 오름차순)
     items.sort((a, b) => Number(a.id) - Number(b.id));
 
     // 4) 커서 기반 페이지네이션 (cursor는 "마지막으로 본 token_id")
     if (cursor !== undefined) {
-      items = items.filter(it => Number(it.id) > cursor);
+      items = items.filter((it) => Number(it.id) > cursor);
     }
 
     // 5) limit 적용 및 nextCursor 계산
